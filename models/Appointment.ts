@@ -1,3 +1,4 @@
+// Без изменений
 import mongoose, { Schema, type Document } from "mongoose"
 
 export interface IAppointment extends Document {
