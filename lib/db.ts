@@ -1,36 +1,52 @@
-// Без изменений
 import mongoose from "mongoose"
 
 const MONGODB_URI = process.env.MONGODB_URI
 
 if (!MONGODB_URI) {
-  throw new Error("Пожалуйста, определите переменную окружения MONGODB_URI")
+  throw new Error("Please define the MONGODB_URI environment variable inside .env.local")
 }
 
-const cached = global as typeof global & {
-  mongoose: { conn: typeof mongoose | null; promise: Promise<typeof mongoose> | null }
+interface MongooseCache {
+  conn: typeof mongoose | null
+  promise: Promise<typeof mongoose> | null
 }
 
-if (!cached.mongoose) {
-  cached.mongoose = { conn: null, promise: null }
+declare global {
+  var mongooseCache: MongooseCache | undefined
 }
 
-async function connectDB() {
-  if (cached.mongoose.conn) {
-    return cached.mongoose.conn
+const cached: MongooseCache = global.mongooseCache || { conn: null, promise: null }
+
+if (!global.mongooseCache) {
+  global.mongooseCache = cached
+}
+
+async function connectDB(): Promise<typeof mongoose> {
+  if (cached.conn) {
+    return cached.conn
   }
 
-  if (!cached.mongoose.promise) {
+  if (!cached.promise) {
     const opts = {
       bufferCommands: false,
+      maxPoolSize: 10,
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+      family: 4,
     }
 
-    cached.mongoose.promise = mongoose.connect(MONGODB_URI!, opts).then((mongoose) => {
-      return mongoose
-    })
+    cached.promise = mongoose.connect(MONGODB_URI, opts)
   }
-  cached.mongoose.conn = await cached.mongoose.promise
-  return cached.mongoose.conn
+
+  try {
+    cached.conn = await cached.promise
+    console.log("✅ MongoDB connected successfully")
+    return cached.conn
+  } catch (e) {
+    cached.promise = null
+    console.error("❌ MongoDB connection error:", e)
+    throw e
+  }
 }
 
 export default connectDB
